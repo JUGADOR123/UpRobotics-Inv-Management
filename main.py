@@ -7,7 +7,7 @@ from src.App import QrReader as App, QrReader
 
 if __name__ == "__main__":
     print("Starting Up...")
-    sleep(10)
+    sleep(5)
     app = QApplication(sys.argv)
     window = QrReader()
     window.show()
