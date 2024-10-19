@@ -28,6 +28,7 @@ class QrReader(QWidget):
         self.partData = QTextEdit()
         self.partData.setReadOnly(True)
         self.partData.setPlainText("MPN: aaaaa \nName: bbbbb \nType: cccc")
+        self.showMaximized()
 
         layout = QGridLayout()
         layout.addWidget(self.rawCamera, 0, 0)
