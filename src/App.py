@@ -53,16 +53,32 @@ class QrReader(QWidget):
             # Convert frame to RGB
             captured_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # ---- Display raw feed ----
-            raw_feed = captured_frame.copy()
-            cv2.putText(raw_feed, "Raw Feed", (10, 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 0), 1)
-            self.set_raw_feed(raw_feed)
+            # ---- Grayscale conversion ----
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # ---- Light Gaussian Blur (reduce noise without affecting barcodes too much) ----
+            blurred = cv2.GaussianBlur(gray, (3, 3), 0)  # Smaller kernel to avoid over-blurring barcodes
+
+            # ---- Adaptive thresholding (post-processed image) ----
+            adaptive_thresh = cv2.adaptiveThreshold(
+                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+            )
+
+            # ---- Edge detection (to preserve sharp details like barcodes) ----
+            edges = cv2.Canny(adaptive_thresh, 50, 150)  # Adjust thresholds to fine-tune
+
+            # ---- Light morphological operations to reduce small noise ----
+            kernel = np.ones((2, 2), np.uint8)  # Smaller kernel to minimize merging barcode lines
+            morph = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+
+            # ---- Convert single-channel (grayscale) morph image back to 3-channel (for visualization) ----
+            contour_frame = cv2.cvtColor(morph, cv2.COLOR_GRAY2BGR)
 
             # ---- Detections (QR/barcodes) ----
-            detection_feed = captured_frame.copy()
-            detections = detect_codes(detection_feed)
-            cv2.putText(detection_feed, f'Detections: {len(detections)}', (10, 10), cv2.FONT_HERSHEY_PLAIN, 1,
-                        (255, 0, 0), 1)
+            detections = detect_codes(captured_frame)
+            cv2.putText(contour_frame, f'Detections: {len(detections)}', (10, 10), cv2.FONT_HERSHEY_PLAIN, 1,
+                        (50, 150, 0), 1)
+
             for qr_code in detections:
                 points = qr_code.polygon
                 if len(points) > 4:
@@ -74,10 +90,17 @@ class QrReader(QWidget):
                 for j in range(0, n):
                     pt1 = tuple(map(int, hull[j]))  # Convert to tuple of integers
                     pt2 = tuple(map(int, hull[(j + 1) % n]))  # Next point, also converted
-                    cv2.line(detection_feed, pt1, pt2, (0, 255, 60, 2),5)  # Draw detection boxes on the captured image
+                    cv2.line(contour_frame, pt1, pt2, (255, 0, 0),
+                             1)  # Draw detection boxes on the post-processed image
 
-            # ---- Display detection feed with boxes ----
-            self.set_bounding_box_feed(detection_feed)
+            # ---- Display post-processed feed with detection boxes ----
+            self.set_bounding_box_feed(contour_frame)
+
+            # ---- Also update raw feed ----
+            raw_feed = captured_frame.copy()
+            cv2.putText(raw_feed, "Raw Feed", (10, 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 0), 1)
+            self.set_raw_feed(raw_feed)
+
             # Update the info text with detection data
             self.update_info(detections)
 
