@@ -1,6 +1,6 @@
 import sys
 import cv2
-from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget, QTextEdit, QGridLayout
+from PyQt5.QtWidgets import QLabel,  QWidget, QTextEdit, QGridLayout
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from pyzbar.pyzbar import decode
