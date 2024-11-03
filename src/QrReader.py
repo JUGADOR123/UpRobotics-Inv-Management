@@ -4,7 +4,8 @@ from PyQt5.QtCore import QSize
 from PyQt5.QtWidgets import QLabel, QWidget, QTextEdit, QGridLayout, QPushButton
 from pyzbar.pyzbar import decode
 from src.CameraThread import CameraThread
-from src.Utils import set_feed, extract_part_data
+from src.Utils import set_feed, extract_part_data, build_part_data
+
 
 class QrReader(QWidget):
     def __init__(self):
@@ -61,8 +62,13 @@ class QrReader(QWidget):
                     self.detected_Codes.add(code_data)  # Add the string representation to the set
                     if code.type == 'QRCODE':
                         part_data = extract_part_data(code_data)
-                        self.part_data_list.append(part_data)  # Append part data to the list
                         self.partData.append(f"MPN: {part_data.get('pm')}, Qty: {part_data.get('qty')}\n")
+                        part_data = build_part_data(part_data.get('pm'), part_data.get('qty'))
+                        if part_data:
+                            display_text = "\n".join([f"{key}: {value}" for key, value in part_data.items()])
+                            self.infoBox.setText(display_text)
+                        else:
+                            self.infoBox.setText("Not found on Mouser")
             return detections
         return []
 
