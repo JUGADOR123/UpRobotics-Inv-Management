@@ -3,7 +3,7 @@ from time import sleep
 
 from PyQt5.QtWidgets import QApplication
 
-from src.App import QrReader as App, QrReader
+from src.QrReader import QrReader as App, QrReader
 
 if __name__ == "__main__":
     print("Starting Up...")
