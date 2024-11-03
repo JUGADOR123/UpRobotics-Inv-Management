@@ -20,7 +20,7 @@ def extract_part_data(code_data):
     for pair in key_value_pairs:
         key, value = pair.split(':', 1)  # Split only on the first colon
         part_data[key.strip()] = value.strip()  # Add to part_data dictionary
-    print(part_data)
+    #print(part_data)
     return part_data  # Return the dictionary containing part data
 
 
@@ -54,10 +54,10 @@ def build_part_data(mpn, qty):
                 'PartNumber': mpn,
                 'Quantity': qty,
                 'Description': data["SearchResults"]["Parts"][0]["Description"],
-                'Datasheet' : data["SearchResults"]["Parts"][0]["DataSheetUrl"],
+                'DataSheet' : data["SearchResults"]["Parts"][0]["DataSheetUrl"],
                 'ImagePath' : data["SearchResults"]["Parts"][0]["ImagePath"]
             }
-            print(mouserPart)
+            #print(mouserPart)
             return mouserPart
         else:
             print("No results found for the provided MPN.")
