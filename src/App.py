@@ -28,7 +28,7 @@ class QrReader(QWidget):
         self.infoBox.setReadOnly(True)
         self.partData = QTextEdit()
         self.partData.setReadOnly(True)
-        self.partData.setPlainText("MPN: aaaaa \nName: bbbbb \nType: cccc")
+        self.partData.setPlainText("Manufacturer Part Numbers:\n")
         self.settingsButton = QPushButton("Open Camera Settings")
         self.settingsButton.clicked.connect(self.open_camera_settings)
 
@@ -58,6 +58,19 @@ class QrReader(QWidget):
         # Saving the codes
         self.detected_Codes = set()
         self.valid_codes = set()
+        self.mpn = set()
+
+    def extract_mpn(self, code_data):
+        # Remove the curly braces and split the string into key-value pairs
+        key_value_pairs = code_data.strip('{}').split(',')
+
+        # Iterate through the pairs and return the value for 'pm' if found
+        for pair in key_value_pairs:
+            key, value = pair.split(':', 1)  # Split only on the first colon
+            if key.strip() == 'pm':  # Check if the key is 'pm'
+                return value.strip()  # Return the corresponding value
+
+        return None  # Return None if 'pm' is not found
 
     def detect_codes(self, image):
         detections = decode(image)
@@ -67,7 +80,10 @@ class QrReader(QWidget):
                 if code_data not in self.detected_Codes:
                     print(f'Type: {code.type}, Data: {code_data}')  # Print to console
                     self.detected_Codes.add(code_data)  # Add the string representation to the set
-                    self.infoBox.append(f'Type: {code.type}, Data: {code_data}\n')  # Append to infoBox
+                    if code.type == 'QRCODE':
+                        mpn = self.extract_mpn(code_data)
+                        self.mpn.add(mpn)
+                        self.partData.append(f"MPN: {mpn}\n")
             return detections
         return []
 
