@@ -24,6 +24,10 @@ class CameraThread(QThread):
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 4096)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+        self.cap.set(cv2.CAP_PROP_CONTRAST, 140)
+        self.cap.set(cv2.CAP_PROP_SHARPNESS, 0)
+        self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 130)
+        self.cap.set(cv2.CAP_PROP_SETTINGS, 1)
 
         for prop, prop_id in properties.items():
             print(f"{prop}: {self.cap.get(prop_id)}")
