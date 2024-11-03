@@ -19,23 +19,30 @@ properties = {
 class CameraThread(QThread):
     frame_captured = pyqtSignal(np.ndarray)
 
+    def __init__(self):
+        super().__init__()
+        self.cap = None
+        self.running = True  # Control flag for the thread
+
     def run(self):
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 4096)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
-        self.cap.set(cv2.CAP_PROP_CONTRAST, 140)
-        self.cap.set(cv2.CAP_PROP_SHARPNESS, 0)
+        self.cap.set(cv2.CAP_PROP_CONTRAST, 105)
+        self.cap.set(cv2.CAP_PROP_SHARPNESS, 125)
         self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 130)
-        self.cap.set(cv2.CAP_PROP_SETTINGS, 1)
+        self.cap.set(cv2.CAP_PROP_SATURATION, 130)
 
         for prop, prop_id in properties.items():
             print(f"{prop}: {self.cap.get(prop_id)}")
 
-        while True:
+        while self.running:  # Run while the flag is True
             ret, frame = self.cap.read()
             if ret:
                 self.frame_captured.emit(frame)
 
     def release(self):
-        self.cap.release()
+        self.running = False  # Stop the loop in run
+        if self.cap is not None:
+            self.cap.release()
