@@ -6,6 +6,9 @@ from PyQt5.QtGui import QImage, QPixmap
 from pyzbar.pyzbar import decode
 import numpy as np
 
+from src.VideoCaptureThread import  CameraThread
+
+
 
 def detect_codes(image):
     detections = decode(image)
@@ -19,7 +22,8 @@ def detect_codes(image):
 class QrReader(QWidget):
     def __init__(self):
         super().__init__()
-        #layout
+        self.display_size = (960, 540)
+        # Layout
         self.setWindowTitle("Inventory Management")
         self.rawCamera = QLabel()
         self.boundingBoxCamera = QLabel()
@@ -37,52 +41,46 @@ class QrReader(QWidget):
         layout.addWidget(self.partData, 1, 1)
         self.setLayout(layout)
 
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            print("Error: Could not open camera.")
-            sys.exit()
+        # Camera thread setup
+        self.camera_thread = CameraThread()
+        self.camera_thread.frame_captured.connect(self.process_frame)
+        self.camera_thread.start()
 
-        # Timer to update frame
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_frame)
-        self.timer.start(10)  # Trigger every 10ms
+        # Timer to update UI
         self.detected_Codes = set()
 
-    def update_frame(self):
-        ret, frame = self.cap.read()
-        if ret:
-            # Convert frame to RGB
-            captured_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    def process_frame(self, frame):
+        # Convert frame to RGB
+        captured_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # ---- Display raw feed ----
-            raw_feed = captured_frame.copy()
-            cv2.putText(raw_feed, "Raw Feed", (10, 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 0), 1)
-            self.set_raw_feed(raw_feed)
+        # ---- Display raw feed ----
+        raw_feed = cv2.resize(captured_frame, self.display_size)
+        cv2.putText(raw_feed, "Raw Feed", (10, 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 0), 1)
+        self.set_raw_feed(raw_feed)
 
-            # ---- Detections (QR/barcodes) ----
-            detection_feed = captured_frame.copy()
-            detections = detect_codes(detection_feed)
-            cv2.putText(detection_feed, f'Detections: {len(detections)}', (10, 10), cv2.FONT_HERSHEY_PLAIN, 1,
-                        (255, 0, 0), 1)
-            for qr_code in detections:
-                points = qr_code.polygon
-                if len(points) > 4:
-                    hull = cv2.convexHull(np.array([point for point in points], dtype=np.float32))
-                    hull = list(map(tuple, np.squeeze(hull)))
-                else:
-                    hull = points
-                n = len(hull)
-                for j in range(0, n):
-                    pt1 = tuple(map(int, hull[j]))  # Convert to tuple of integers
-                    pt2 = tuple(map(int, hull[(j + 1) % n]))  # Next point, also converted
-                    cv2.line(detection_feed, pt1, pt2, (0, 255, 60, 2),5)  # Draw detection boxes on the captured image
+        # ---- Detections (QR/barcodes) ----
+        detection_feed = cv2.resize(captured_frame, self.display_size)
+        detections = detect_codes(detection_feed)
+        cv2.putText(detection_feed, f'Detections: {len(detections)}', (10, 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 0),
+                    1)
 
-            # ---- Display detection feed with boxes ----
-            self.set_bounding_box_feed(detection_feed)
-            # Update the info text with detection data
-            self.update_info(detections)
+        for qr_code in detections:
+            points = qr_code.polygon
+            if len(points) > 4:
+                hull = cv2.convexHull(np.array([point for point in points], dtype=np.float32))
+                hull = list(map(tuple, np.squeeze(hull)))
+            else:
+                hull = points
+            n = len(hull)
+            for j in range(n):
+                pt1 = tuple(map(int, hull[j]))
+                pt2 = tuple(map(int, hull[(j + 1) % n]))
+                cv2.line(detection_feed, pt1, pt2, (0, 255, 60, 2), 5)
 
-        #frame.release()
+        # ---- Display detection feed with boxes ----
+        self.set_bounding_box_feed(detection_feed)
+        self.update_info(detections)
+
     def set_bounding_box_feed(self, frame):
         try:
             h, w, ch = frame.shape
@@ -100,16 +98,16 @@ class QrReader(QWidget):
             self.rawCamera.setPixmap(QPixmap.fromImage(qt_image))
         except Exception as e:
             print(f"Error in set_raw_feed: {e}")
+
     def closeEvent(self, event):
-        self.cap.release()
+        self.capture_thread.stop()
+        self.capture_thread.wait()
         event.accept()
 
     def update_info(self, decoded_objects):
-        data = ''
         try:
             for obj in decoded_objects:
                 code_data = obj.data.decode('utf-8')
-                # Only add new codes to the set
                 if code_data not in self.detected_Codes:
                     self.detected_Codes.add(code_data)
                     self.infoBox.append(f'Type: {obj.type} , Data: {code_data}\n')
