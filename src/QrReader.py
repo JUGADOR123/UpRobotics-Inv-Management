@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import requests
+import time
 from PyQt5.QtCore import QSize, Qt, pyqtSlot
 from PyQt5.QtWidgets import QLabel, QMainWindow, QTextEdit, QGridLayout, QPushButton, QWidget, QSizePolicy
 from PyQt5.QtGui import QPixmap, QImage
@@ -16,7 +16,8 @@ class QrReader(QMainWindow):
         super().__init__()
         try:
             self.pdf_loader_thread = None
-            self.image_loader_thread = None
+            self.image_loader_thread = ImageLoaderThread()
+            self.image_loader_thread.image_loaded.connect(self.display_image)
             self.setMaximumSize(QSize(1920, 1080))
             self.resize(1920, 1080)
             self.display_size = (640, 360)
@@ -81,88 +82,119 @@ class QrReader(QMainWindow):
             self.part_data_list = []
             self.found_codes = 0
             self.not_found_codes = 0
+            self.last_detections = None
+            self.code_timestamps = dict()
 
             self.showFullScreen()
         except Exception as e:
             print(f"Error {e}")
 
-    # Helper function to handle data retrieval
-    def get_part_data(self, part_number):
-        # First, check if part exists locally
-        local_data = next((item for item in self.part_data_list if item['PartNumber'] == part_number), None)
-        if local_data:
-            return local_data  # Return local data if available
-
-        # Otherwise, retrieve data via API
-        part_data = extract_part_data(part_number)
-        if part_data:
-            part_data = build_part_data(part_data.get('pm'), part_data.get('qty'))
-            if part_data:
-                # Add new data to the local list
-                self.part_data_list.append(part_data)
-                self.found_codes +=1
-                return part_data
-        else:
-            #the data does not exist on mouser
-            self.not_found_codes += 1
-        return None
-    def detect_codes(self,image):
-        detections = decode(image)
-        if detections:
-            for code in detections:
-                code_data = code.data.decode('utf-8')
-                if code_data not in self.detected_Codes:
-                    #if the code is new, we add it to the set and update the counter
-                    self.detected_Codes.add(code_data)
-                    self.scannedCodesLabel.setText(len(self.detected_Codes))
-                    #if its qr code with a valid data structure, we save it
-                    if code.type == 'QRCODE':
-                        extracted_part_data = extract_part_data(code.data)
-                        if extracted_part_data:
-                            #after we extract the part number and check if its local or not
-                            fetched_data = self.get_part_data(extracted_part_data.get('pm'))
-                            if fetched_data:
-                                display_text = '\n'.join([f"{key}: {value}" for key, value in fetched_data.items()])
-                                self.foundCodesCounterLabel.setText(f'{self.found_codes}')
-                                self.infoBox.setText(display_text)
-                                self.load_image_from_url(fetched_data.get('ImagePath'))
-                            else:
-                                #the part does not exist on mouser and is not local
-                                self.infoBox.setText("Not found on Mouser")
-                                self.notFoundCodesCounterLabel.setText(f"{self.not_found_codes}")
-                                self.imageLabel.clear()
-
-
-
-
-
-
-    def load_pdf_from_url(self, url):
-        self.pdf_loader_thread = PdfLoaderThread(url)
-        #self.pdf_loader_thread.pdf_loaded.connect(self.display_pdf)
-        self.pdf_loader_thread.start()
-
     def load_image_from_url(self, url):
-        self.image_loader_thread = ImageLoaderThread(url)
-        self.image_loader_thread.image_loaded.connect(self.display_image)
-        self.image_loader_thread.start()
+        self.image_loader_thread.new_url.emit(url)
 
     @pyqtSlot(QImage)
     def display_image(self, q_image):
-        if not q_image.isNull():  # Ensure q_image is valid
-            # Convert the QImage to a QPixmap
-            pixmap = QPixmap.fromImage(q_image)  # Safe as QApplication is initialized
-
-            # Scale the pixmap to fit the imageLabel while maintaining the aspect ratio
+        if not q_image.isNull():
+            pixmap = QPixmap.fromImage(q_image)
             scaled_pixmap = pixmap.scaled(self.imageLabel.size(),
                                           aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio,
                                           transformMode=Qt.TransformationMode.SmoothTransformation)
-
-            # Set the scaled pixmap to the imageLabel
             self.imageLabel.setPixmap(scaled_pixmap)
             self.imageLabel.setFixedSize(scaled_pixmap.size())
         else:
             print("Received an invalid QImage for display.")
+            self.imageLabel.clear()
+    # Helper function to handle data retrieval
+    def fetch_local_data(self, part_number):
+        """Check if part exists locally and return it if found."""
+        print(f"Searching for {part_number} in database")
+        local_data = next((item for item in self.part_data_list if item['PartNumber'] == part_number), None)
+
+        if local_data:
+            print("Part exists in database, using locally available data:", local_data)
+            return True, local_data  # Return dictionary directly
+
+        print("Part not found in database, returning None")
+        return False, None
+
+    def fetch_data_from_api(self, part_number, qty):
+        """Fetch part data from API if not found locally, and add it to the database if available."""
+        state, part_data = build_part_data(part_number, qty)
+        if state:
+            print("Found part in Mouser... Adding to database")
+            self.part_data_list.append(part_data)
+            self.found_codes += 1
+            return True, part_data
+        else:
+            print("Not found in Mouser, storing basic part number and quantity")
+            self.not_found_codes += 1
+            return False, part_data
+
+    def detect_codes(self, image):
+        try:
+            detections = decode(image)
+            current_time = time.time()
+
+            if detections:
+                for code in detections:
+                    code_data = code.data.decode('utf-8')
+
+                    if code_data not in self.detected_Codes or \
+                            (code_data in self.code_timestamps and current_time - self.code_timestamps[code_data] > 2):
+
+                        self.code_timestamps[code_data] = current_time
+
+                        if code_data not in self.detected_Codes:
+                            self.detected_Codes.add(code_data)
+                            self.scannedCodesCounterLabel.setText(f'{len(self.detected_Codes)}')
+
+                            if code.type == 'QRCODE':
+                                print("New QR Code detected")
+                                extracted_part_data = extract_part_data(code.data)
+
+                                if extracted_part_data:
+                                    part_number = extracted_part_data.get('pm')
+                                    qty = extracted_part_data.get('qty')
+                                    print(f"Extracted part number: {part_number} and Quantity: {qty}")
+
+                                    state, fetched_data = self.fetch_data_from_api(part_number, qty)
+                                    if state:
+                                        display_text = '\n'.join(
+                                            [f"{key}: {value}" for key, value in fetched_data.items()])
+                                        self.foundCodesCounterLabel.setText(f'{self.found_codes}')
+                                        self.infoBox.setText(display_text)
+                                        self.load_image_from_url(fetched_data.get('ImagePath'))
+                                        self.part_data_list.append(fetched_data)
+                                    else:
+                                        self.infoBox.setText(
+                                            f"Not found on Mouser\nPart Number: {fetched_data.get('PartNumber')}\nQuantity: {fetched_data.get('Quantity')}")
+                                        self.notFoundCodesCounterLabel.setText(f"{self.not_found_codes}")
+                                        self.imageLabel.clear()
+                                        self.part_data_list.append(fetched_data)
+                        else:
+                            if code.type == 'QRCODE':
+                                print("Scanned code already in database")
+                                extracted_part_data = extract_part_data(code.data)
+                                if extracted_part_data:
+                                    print(
+                                        f"Extracted part number: {extracted_part_data.get('pm')} and Quantity: {extracted_part_data.get('qty')}"
+                                    )
+                                state, fetched_data = self.fetch_local_data(extracted_part_data.get('pm'))
+                                if state and isinstance(fetched_data, dict):
+                                    display_text = '\n'.join([f"{key}: {value}" for key, value in fetched_data.items()])
+                                    self.foundCodesCounterLabel.setText(f'{self.found_codes}')
+                                    self.infoBox.setText(display_text)
+                                    self.load_image_from_url(fetched_data.get('ImagePath'))
+                                else:
+                                    self.infoBox.setText("this shouldn't happen.")
+                                    self.notFoundCodesCounterLabel.setText(f"{self.not_found_codes}")
+                                    self.imageLabel.clear()
+                return detections
+            else:
+                return []
+        except Exception as e:
+            print(f"Error in detect_codes: {e}")
+            return []
 
     def process_frame(self, frame):
         if self.isVisible():

@@ -14,7 +14,7 @@ class CameraThread(QThread):
         self.running = True
 
     def run(self):
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)

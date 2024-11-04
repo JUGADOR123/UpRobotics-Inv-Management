@@ -12,15 +12,26 @@ def set_feed(frame, label):
     except Exception as e:
         print(f"Error in set_feed: {e}")
 
+
 def extract_part_data(code_data):
+    # Decode bytes to string if necessary
+    if isinstance(code_data, bytes):
+        code_data = code_data.decode('utf-8')
+
     # Remove the curly braces and split the string into key-value pairs
+    print(code_data)
     key_value_pairs = code_data.strip('{}').split(',')
     part_data = {}
+
     # Iterate through the pairs and extract values for 'pm' and 'qty'
     for pair in key_value_pairs:
-        key, value = pair.split(':', 1)  # Split only on the first colon
-        part_data[key.strip()] = value.strip()  # Add to part_data dictionary
-    #print(part_data)
+        # Split only if there is a key and a value
+        if ':' in pair:
+            key, value = pair.split(':', 1)
+            part_data[key.strip()] = value.strip()
+        else:
+            print(f"Warning: Skipping malformed pair '{pair}'")
+
     return part_data  # Return the dictionary containing part data
 
 
@@ -46,7 +57,7 @@ def build_part_data(mpn, qty):
         # Check for errors in the response
         if data["Errors"]:
             print(f"Errors in response: {data['Errors']}")
-            return None
+            return False, None
 
         # Ensure there is at least one result
         if data["SearchResults"]["NumberOfResult"] > 0:
@@ -58,10 +69,17 @@ def build_part_data(mpn, qty):
                 'ImagePath' : data["SearchResults"]["Parts"][0]["ImagePath"]
             }
             #print(mouserPart)
-            return mouserPart
+            return True, mouserPart
         else:
             print("No results found for the provided MPN.")
-            return None
+            genericPart = {
+                'PartNumber': mpn,
+                'Quantity': qty,
+                'Description': None,
+                'DataSheet': None,
+                'ImagePath': None
+            }
+            return False, genericPart
     except requests.exceptions.RequestException as e:
         print(f"HTTP request failed: {e}")
         return None
