@@ -1,6 +1,6 @@
 import cv2
-from PyQt5.QtCore import QThread, pyqtSignal
 import numpy as np
+from PyQt5.QtCore import QThread, pyqtSignal
 
 class CameraThread(QThread):
     frame_captured = pyqtSignal(np.ndarray)
@@ -11,7 +11,7 @@ class CameraThread(QThread):
     def __init__(self):
         super().__init__()
         self.cap = None
-        self.running = True  # Control flag for the thread
+        self.running = True
 
     def run(self):
         self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)

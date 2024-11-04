@@ -1,5 +1,6 @@
 import requests
 from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
+
 class PdfLoaderThread(QThread):
     pdf_loaded = pyqtSignal(QByteArray)
 
@@ -15,7 +16,7 @@ class PdfLoaderThread(QThread):
 
         try:
             response = requests.get(self.pdf_url, headers=headers)
-            response.raise_for_status()  # Check for HTTP errors
+            response.raise_for_status()
             pdf_data = QByteArray(response.content)
             self.pdf_loaded.emit(pdf_data)
         except requests.RequestException as e:
